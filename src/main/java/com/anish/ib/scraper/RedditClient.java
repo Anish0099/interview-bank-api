@@ -26,7 +26,9 @@ public class RedditClient {
     private static final Logger log = LoggerFactory.getLogger(RedditClient.class);
     private static final String TOKEN_URL = "https://www.reddit.com/api/v1/access_token";
     private static final String OAUTH_BASE = "https://oauth.reddit.com";
-    private static final String PUBLIC_BASE = "https://www.reddit.com";
+    // old.reddit.com is served by different infra than www.reddit.com and often
+    // isn't gated by the same WAF rules that block residential Indian ISPs.
+    private static final String PUBLIC_BASE = "https://old.reddit.com";
 
     private final RedditProperties props;
     private final HttpClient http;
