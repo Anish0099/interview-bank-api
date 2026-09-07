@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
@@ -26,11 +27,13 @@ public class ScraperCli {
 
     public static void main(String[] args) {
         System.setProperty("spring.main.web-application-type", "none");
+        System.setProperty("ib.cli.enabled", "true");
         SpringApplication.run(ScraperCli.class, args);
     }
 
     @Component
     @Profile("!test")
+    @ConditionalOnProperty(name = "ib.cli.enabled", havingValue = "true")
     static class Runner implements CommandLineRunner {
         private static final Logger log = LoggerFactory.getLogger(Runner.class);
 
