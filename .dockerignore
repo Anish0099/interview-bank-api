@@ -1,0 +1,14 @@
+target/
+*.jar
+.idea/
+*.iml
+.vscode/
+.git/
+.github/
+.env
+.env.local
+bruno/
+deploy/
+LEGAL.md
+README.md
+SETUP.md

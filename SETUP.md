@@ -1,6 +1,6 @@
 # InterviewBank — Setup Guide
 
-Zero-cost setup: Neon Postgres + Render (backend) + Vercel (frontend) + GitHub Actions (cron) + Groq (LLM) + Gemini (embeddings).
+Zero-cost setup: Neon Postgres + Google Cloud Run (backend) + Vercel (frontend) + GitHub Actions (cron) + Groq (LLM) + Gemini (embeddings). Render is kept as a fallback if you'd rather not attach a billing account to Google Cloud.
 
 ## 1. Prerequisites
 
@@ -45,48 +45,62 @@ Zero-cost setup: Neon Postgres + Render (backend) + Vercel (frontend) + GitHub A
 1. Go to https://aistudio.google.com/app/apikey.
 2. Create an API key. Free tier includes 1500 requests/day on `text-embedding-004`.
 
-## 6. Deploy the backend to Render
+## 6. Deploy the backend to Google Cloud Run
 
-1. Push `interview-bank-api/` to GitHub.
-2. On https://dashboard.render.com, click **New → Web Service** and connect the repo.
-3. Render will detect the `render.yaml`. Confirm environment = Docker, plan = Free, region = Singapore.
-4. In the service's **Environment** tab, set the following secrets:
-   - `DB_URL`, `DB_USER`, `DB_PASSWORD`
-   - `CORS_ALLOWED_ORIGINS` — set to your future Vercel URL, e.g. `https://interview-bank-web.vercel.app` (add more, comma-separated, later)
+Cloud Run beats Render on cold start (~1–3s JVM warm-up vs 30–60s on Render) and the free tier is permanent, not credit-based. Requires a Google Cloud account with a payment method on file — you won't be charged unless you exceed the always-free quota (2M requests / 360k GB-seconds / 180k vCPU-seconds per month), which a small app will not.
+
+1. Install the gcloud CLI: https://cloud.google.com/sdk/docs/install (on Debian/Ubuntu: `sudo apt install google-cloud-cli`).
+2. Sign in and create a project:
+   ```bash
+   gcloud auth login
+   gcloud projects create interview-bank-<your-suffix> --name="InterviewBank"
+   gcloud config set project interview-bank-<your-suffix>
+   ```
+3. Attach a billing account to that project (Cloud Run free tier still requires billing to be linked — nothing gets charged until you exceed free quota): https://console.cloud.google.com/billing/linkedaccount
+4. Fill in the values in your local `interview-bank-api/.env`:
+   - `GCP_PROJECT` — the project id from step 2
+   - `DB_URL`, `DB_USER`, `DB_PASSWORD` — Neon values
+   - `CORS_ALLOWED_ORIGINS` — your future Vercel URL, e.g. `https://interview-bank-web.vercel.app`
    - `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, `REDDIT_USER_AGENT`
    - `GROQ_API_KEY`, `GEMINI_API_KEY`
-   - `TAKEDOWN_CONTACT_EMAIL` — your email
-5. Deploy. First deploy runs Flyway migrations automatically. Check `https://<service>.onrender.com/api/health` — should return `{"status":"ok"}`.
+   - `TAKEDOWN_CONTACT_EMAIL`
+5. Deploy from source (Cloud Build builds the Docker image for you — no local Docker required):
+   ```bash
+   cd interview-bank-api/deploy/cloudrun
+   ./deploy.sh
+   ```
+   First deploy takes ~4–5 minutes. It ends by printing the live URL.
+6. Verify: `curl https://<your-cloud-run-host>/api/health` — should return `{"status":"ok"}`.
 
-## 7. Prevent Render cold starts (UptimeRobot)
+The service auto-scales to zero when idle and wakes on the first request, so **no UptimeRobot ping is needed**.
 
-1. Sign up at https://uptimerobot.com (free tier: 50 monitors, 5-minute interval).
-2. Add a new **HTTPS monitor** for `https://<your-render-host>/api/health` at 5-minute interval.
-3. This keeps the free-tier Render service warm during business hours.
+### Alternative: Render (fallback)
 
-## 8. Deploy the frontend to Vercel
+The repo still ships a `render.yaml`. If you prefer Render, push to GitHub, import as a **Web Service** with environment = Docker, plan = Free, region = Singapore, and set the same env vars in the service's **Environment** tab. Add an UptimeRobot HTTPS monitor pointing at `/api/health` at 5-minute intervals to soften the 15-minute cold-sleep.
+
+## 7. Deploy the frontend to Vercel
 
 1. Push `interview-bank-web/` to GitHub.
 2. On https://vercel.com/new, import the repo.
 3. Framework preset = Next.js. Root directory = repo root.
 4. Add these environment variables (both Preview and Production):
-   - `NEXT_PUBLIC_API_URL` = `https://<your-render-host>` (no trailing slash)
+   - `NEXT_PUBLIC_API_URL` = `https://<your-cloud-run-host>` (no trailing slash)
    - `NEXT_PUBLIC_SITE_URL` = `https://<your-vercel-domain>` (or your custom domain when connected)
 5. Deploy.
 
-## 9. Connect a custom domain (optional)
+## 8. Connect a custom domain (optional)
 
 - Vercel: **Domains → Add** → follow DNS instructions with your registrar. Update `NEXT_PUBLIC_SITE_URL` after DNS propagates.
-- Render: same, under the service's **Custom Domain** tab. Update `CORS_ALLOWED_ORIGINS` to include the new domain.
+- Cloud Run: **Cloud Run console → your service → Custom Domains → Add Mapping** (or use Cloud Load Balancer for HTTPS on an apex domain). Update `CORS_ALLOWED_ORIGINS` to include the new domain and redeploy.
 
-## 10. Wire up the GitHub Actions cron scraper
+## 9. Wire up the GitHub Actions cron scraper
 
 1. In the `interview-bank-api` repo's GitHub settings, go to **Settings → Secrets → Actions**.
-2. Add every secret you set on Render — same names, same values.
+2. Add every secret you set on Cloud Run — same names, same values.
 3. Trigger the workflow once manually from the **Actions** tab (`Scrape and extract` → **Run workflow** → mode `recent`).
 4. Confirm the run finishes green. The cron will now trigger every 6 hours automatically.
 
-## 11. Capture 30 real seed posts locally
+## 10. Capture 30 real seed posts locally
 
 Before the frontend has real content, capture a small seed corpus locally so you can develop against real data.
 
@@ -103,7 +117,7 @@ java -jar target/ib-api-scraper.jar --mode=export-seed --out=seed/reddit-samples
 git add seed/reddit-samples.json && git commit -m "chore(scraper): seed corpus"
 ```
 
-## 12. Verify Google Search Console
+## 11. Verify Google Search Console
 
 1. On https://search.google.com/search-console, add your production domain as a **URL prefix property**.
 2. Verify ownership via DNS TXT record (Vercel exposes this in the domains UI).

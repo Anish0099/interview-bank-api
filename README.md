@@ -36,9 +36,11 @@ Produces two jars in `target/`:
 - `ib-api-app.jar` — the web server (Render deploys this via the Dockerfile).
 - `ib-api-scraper.jar` — the CLI used by the GitHub Actions cron workflow.
 
-## Preventing Render cold starts
+## Deploying
 
-Render's free tier idles the service after 15 minutes. Add an [UptimeRobot](https://uptimerobot.com/) HTTPS monitor pointing at `https://<your-render-host>/api/health` at a 5-minute interval. Details in the top-level `SETUP.md`.
+The default target is **Google Cloud Run** — see [`SETUP.md`](SETUP.md#6-deploy-the-backend-to-google-cloud-run) and the one-shot script in [`deploy/cloudrun/deploy.sh`](deploy/cloudrun/deploy.sh). Cold starts are ~1–3s and the free tier is permanent.
+
+**Render** is kept as a fallback via [`render.yaml`](render.yaml) if you don't want to attach a billing account to Google Cloud. Its free tier idles the service after 15 minutes, so add an [UptimeRobot](https://uptimerobot.com/) HTTPS monitor pointing at `https://<your-render-host>/api/health` at a 5-minute interval to soften the cold-sleep.
 
 ## Layout
 

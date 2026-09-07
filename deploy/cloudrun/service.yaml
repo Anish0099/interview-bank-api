@@ -1,0 +1,39 @@
+# Cloud Run service manifest for interview-bank-api.
+# Deploy via the deploy.sh script in this folder — that's simpler than
+# `gcloud run services replace` because Cloud Build builds the image for you.
+# This file is kept as a reference and for `gcloud run services replace`
+# when you want to change resource limits without redeploying an image.
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: interview-bank-api
+  labels:
+    cloud.googleapis.com/location: asia-south1
+spec:
+  template:
+    metadata:
+      annotations:
+        # Scale to zero when idle; wake in ~1-3s on first request.
+        autoscaling.knative.dev/minScale: "0"
+        # Cap at 1 instance so we stay inside the free CPU/memory-seconds quota.
+        autoscaling.knative.dev/maxScale: "1"
+        run.googleapis.com/cpu-throttling: "true"
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/startup-cpu-boost: "true"
+    spec:
+      containerConcurrency: 40
+      timeoutSeconds: 60
+      containers:
+        - image: IMAGE_URL
+          ports:
+            - containerPort: 8080
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: prod
+            # Runtime secrets are set via `gcloud run deploy --set-secrets`
+            # or the console — never checked into git.
