@@ -55,7 +55,7 @@ ib:
   groq:
     api-key: ${GROQ_API_KEY:}
     base-url: https://api.groq.com/openai/v1
-    model: ${GROQ_MODEL:llama-3.1-8b-instant}
+    model: ${GROQ_MODEL:openai/gpt-oss-20b}
   gemini:
     api-key: ${GEMINI_API_KEY:}
     embedding-model: text-embedding-004
