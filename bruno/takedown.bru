@@ -1,0 +1,22 @@
+meta {
+  name: takedown
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/takedown
+  body: json
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "pageUrl": "https://interviews.yourdomain.com/question/example-slug",
+    "requesterEmail": "author@example.com",
+    "reason": "I authored this experience and want it removed."
+  }
+}
