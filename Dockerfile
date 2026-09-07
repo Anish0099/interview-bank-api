@@ -12,6 +12,6 @@ WORKDIR /app
 COPY --from=build /src/target/ib-api-app.jar /app/app.jar
 USER ib
 EXPOSE 8080
-ENV JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+UseZGC -Djava.security.egd=file:/dev/./urandom"
+ENV JAVA_OPTS="-XX:MaxRAMPercentage=60 -XX:+UseSerialGC -Xss256k -XX:TieredStopAtLevel=1 -Djava.security.egd=file:/dev/./urandom"
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s CMD wget -qO- http://localhost:8080/actuator/health || exit 1
 ENTRYPOINT ["sh","-c","java $JAVA_OPTS -jar /app/app.jar"]
