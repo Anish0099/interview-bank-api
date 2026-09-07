@@ -77,7 +77,8 @@ public class LlmExtractor {
 
     private static String safe(String s) {
         if (s == null) return "";
-        // Trim runaway posts to keep Groq context reasonable.
-        return s.length() > 12000 ? s.substring(0, 12000) : s;
+        // Trim runaway posts. 4000 chars keeps each request under ~1200 input tokens
+        // so we stay inside Groq free tier's 8000 TPM cap without punishing retries.
+        return s.length() > 4000 ? s.substring(0, 4000) : s;
     }
 }

@@ -55,16 +55,37 @@ public class GroqClient {
             .timeout(Duration.ofSeconds(60))
             .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body)))
             .build();
-        HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
-        if (res.statusCode() == 429) {
-            log.warn("Groq 429 — sleeping 5s and retrying once");
-            Thread.sleep(5000);
-            res = http.send(req, HttpResponse.BodyHandlers.ofString());
+
+        // Free-tier TPM caps (8000/min for gpt-oss-20b) trigger 429 constantly.
+        // Parse the "try again in Xs" hint and honour it; up to 5 attempts.
+        for (int attempt = 1; attempt <= 5; attempt++) {
+            HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
+            if (res.statusCode() == 429) {
+                long waitMs = parseRetryAfter(res.body()).orElse(6000L);
+                log.warn("Groq 429 (attempt {}/5) — sleeping {}ms", attempt, waitMs);
+                Thread.sleep(waitMs);
+                continue;
+            }
+            if (res.statusCode() / 100 != 2) {
+                throw new IllegalStateException("Groq " + res.statusCode() + ": " + res.body());
+            }
+            JsonNode json = mapper.readTree(res.body());
+            return json.path("choices").path(0).path("message").path("content").asText();
         }
-        if (res.statusCode() / 100 != 2) {
-            throw new IllegalStateException("Groq " + res.statusCode() + ": " + res.body());
+        throw new IllegalStateException("Groq: exhausted 5 retries on 429 rate-limit");
+    }
+
+    private static final java.util.regex.Pattern RETRY_AFTER =
+        java.util.regex.Pattern.compile("try again in ([0-9.]+)s");
+
+    private static java.util.Optional<Long> parseRetryAfter(String body) {
+        var m = RETRY_AFTER.matcher(body);
+        if (!m.find()) return java.util.Optional.empty();
+        try {
+            double secs = Double.parseDouble(m.group(1));
+            return java.util.Optional.of((long) Math.ceil(secs * 1000) + 500);
+        } catch (NumberFormatException e) {
+            return java.util.Optional.empty();
         }
-        JsonNode json = mapper.readTree(res.body());
-        return json.path("choices").path(0).path("message").path("content").asText();
     }
 }
