@@ -3,6 +3,7 @@ package com.anish.ib;
 import com.anish.ib.domain.RawPost;
 import com.anish.ib.extractor.ExtractionPipeline;
 import com.anish.ib.repository.RawPostRepository;
+import com.anish.ib.scraper.DevToScraper;
 import com.anish.ib.scraper.GfgScraper;
 import com.anish.ib.scraper.RedditScraper;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -39,17 +40,20 @@ public class ScraperCli {
 
         private final RedditScraper reddit;
         private final GfgScraper gfg;
+        private final DevToScraper devto;
         private final ExtractionPipeline extractor;
         private final RawPostRepository rawPostRepo;
         private final ObjectMapper mapper;
 
         Runner(RedditScraper reddit,
                GfgScraper gfg,
+               DevToScraper devto,
                ExtractionPipeline extractor,
                RawPostRepository rawPostRepo,
                ObjectMapper mapper) {
             this.reddit = reddit;
             this.gfg = gfg;
+            this.devto = devto;
             this.extractor = extractor;
             this.rawPostRepo = rawPostRepo;
             this.mapper = mapper.copy().enable(SerializationFeature.INDENT_OUTPUT);
@@ -85,6 +89,11 @@ public class ScraperCli {
                     int max = "backfill".equals(mode) ? 500 : 100;
                     GfgScraper.ScrapeResult r = gfg.scrape(max);
                     log.info("gfg scrape summary: seen={} inserted={} failed={}", r.seen(), r.inserted(), r.failed());
+                }
+                case "devto" -> {
+                    DevToScraper.ScrapeResult r = devto.scrape(mode);
+                    log.info("devto scrape summary: seen={} inserted={} filtered={} failed={}",
+                        r.seen(), r.inserted(), r.filtered(), r.failed());
                 }
                 default -> log.warn("Unknown source: {}", source);
             }
