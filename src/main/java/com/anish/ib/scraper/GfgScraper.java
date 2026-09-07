@@ -30,7 +30,9 @@ import java.util.List;
 public class GfgScraper {
     private static final Logger log = LoggerFactory.getLogger(GfgScraper.class);
     private static final String SITEMAP_INDEX = "https://www.geeksforgeeks.org/sitemap.xml";
-    private static final String USER_AGENT = "interview-bank/1.0 (+https://interviews.yourdomain.com)";
+    private static final String USER_AGENT =
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+        + "Chrome/131.0.0.0 Safari/537.36";
     private static final long DELAY_MS = 2000;
 
     private final RawPostRepository rawPostRepo;
@@ -48,7 +50,15 @@ public class GfgScraper {
 
     public ScrapeResult scrape(int maxArticles) throws Exception {
         int seen = 0, inserted = 0, failed = 0;
-        List<String> articleUrls = discoverArticleUrls(maxArticles);
+        List<String> articleUrls;
+        try {
+            articleUrls = discoverArticleUrls(maxArticles);
+        } catch (Exception e) {
+            log.warn("GFG discovery failed ({}). GFG is Cloudflare-fronted and blocks many "
+                + "data-center IP ranges (GitHub Actions runners included). Skipping GFG for "
+                + "this run — try again from a residential IP.", e.getMessage());
+            return new ScrapeResult(0, 0, 0);
+        }
         log.info("GFG discovery: {} candidate interview-experience URLs", articleUrls.size());
         for (String url : articleUrls) {
             seen++;
@@ -120,7 +130,16 @@ public class GfgScraper {
     private String fetchText(String url) throws Exception {
         HttpRequest req = HttpRequest.newBuilder(URI.create(url))
             .header("User-Agent", USER_AGENT)
-            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+            .header("Accept-Language", "en-US,en;q=0.9")
+            .header("Accept-Encoding", "identity")
+            .header("Cache-Control", "no-cache")
+            .header("Pragma", "no-cache")
+            .header("Sec-Fetch-Dest", "document")
+            .header("Sec-Fetch-Mode", "navigate")
+            .header("Sec-Fetch-Site", "none")
+            .header("Sec-Fetch-User", "?1")
+            .header("Upgrade-Insecure-Requests", "1")
             .timeout(Duration.ofSeconds(20))
             .GET().build();
         HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
