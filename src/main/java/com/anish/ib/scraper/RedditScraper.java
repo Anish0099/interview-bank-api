@@ -37,9 +37,10 @@ public class RedditScraper {
      *       "backfill" → t=year, paginate up to 5 pages.
      */
     public ScrapeResult scrapeAll(String mode) throws Exception {
-        if (!client.configured()) {
-            log.warn("Reddit credentials missing; skipping scrape.");
-            return new ScrapeResult(0, 0, 0);
+        if (client.configured()) {
+            log.info("Using Reddit OAuth (client_credentials) for scrape.");
+        } else {
+            log.info("REDDIT_CLIENT_ID/SECRET not set — falling back to www.reddit.com public JSON.");
         }
         String time = "backfill".equalsIgnoreCase(mode) ? "year" : "month";
         int pages = "backfill".equalsIgnoreCase(mode) ? 5 : 1;

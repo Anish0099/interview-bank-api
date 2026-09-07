@@ -26,6 +26,7 @@ public class RedditClient {
     private static final Logger log = LoggerFactory.getLogger(RedditClient.class);
     private static final String TOKEN_URL = "https://www.reddit.com/api/v1/access_token";
     private static final String OAUTH_BASE = "https://oauth.reddit.com";
+    private static final String PUBLIC_BASE = "https://www.reddit.com";
 
     private final RedditProperties props;
     private final HttpClient http;
@@ -75,6 +76,12 @@ public class RedditClient {
     }
 
     public JsonNode search(String subreddit, String query, String time, String after) throws Exception {
+        return configured()
+            ? searchAuth(subreddit, query, time, after)
+            : searchPublic(subreddit, query, time, after);
+    }
+
+    private JsonNode searchAuth(String subreddit, String query, String time, String after) throws Exception {
         StringBuilder url = new StringBuilder(OAUTH_BASE)
             .append("/r/").append(subreddit)
             .append("/search?q=").append(URLEncode(query))
@@ -82,21 +89,18 @@ public class RedditClient {
             .append("&sort=new")
             .append("&limit=100")
             .append("&t=").append(time);
-        if (after != null && !after.isBlank()) {
-            url.append("&after=").append(after);
-        }
+        if (after != null && !after.isBlank()) url.append("&after=").append(after);
         HttpRequest req = HttpRequest.newBuilder(URI.create(url.toString()))
             .header("Authorization", "Bearer " + token())
             .header("User-Agent", props.getUserAgent())
             .header("Accept", "application/json")
             .timeout(Duration.ofSeconds(20))
-            .GET()
-            .build();
+            .GET().build();
         HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
         if (res.statusCode() == 429) {
             log.warn("Reddit rate-limit hit on r/{}; sleeping 10s", subreddit);
             Thread.sleep(10_000);
-            return search(subreddit, query, time, after);
+            return searchAuth(subreddit, query, time, after);
         }
         if (res.statusCode() != 200) {
             throw new IllegalStateException("Reddit search failed: " + res.statusCode() + " " + res.body());
@@ -104,15 +108,47 @@ public class RedditClient {
         return mapper.readTree(res.body());
     }
 
+    /**
+     * Public JSON fallback — used when OAuth credentials aren't configured.
+     * Hits www.reddit.com/r/<sub>/search.json which is publicly accessible
+     * but tighter-rate-limited (~10 req/min). Same JSON shape as the OAuth path.
+     */
+    private JsonNode searchPublic(String subreddit, String query, String time, String after) throws Exception {
+        StringBuilder url = new StringBuilder(PUBLIC_BASE)
+            .append("/r/").append(subreddit)
+            .append("/search.json?q=").append(URLEncode(query))
+            .append("&restrict_sr=1")
+            .append("&sort=new")
+            .append("&limit=100")
+            .append("&t=").append(time)
+            .append("&raw_json=1");
+        if (after != null && !after.isBlank()) url.append("&after=").append(after);
+        HttpRequest req = HttpRequest.newBuilder(URI.create(url.toString()))
+            .header("User-Agent", props.getUserAgent())
+            .header("Accept", "application/json")
+            .timeout(Duration.ofSeconds(20))
+            .GET().build();
+        HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
+        if (res.statusCode() == 429) {
+            log.warn("Reddit public rate-limit hit on r/{}; sleeping 60s", subreddit);
+            Thread.sleep(60_000);
+            return searchPublic(subreddit, query, time, after);
+        }
+        if (res.statusCode() != 200) {
+            throw new IllegalStateException("Reddit public search failed: " + res.statusCode() + " " + res.body());
+        }
+        return mapper.readTree(res.body());
+    }
+
     public Optional<JsonNode> fetchPost(String permalink) throws Exception {
-        String url = OAUTH_BASE + permalink + ".json?raw_json=1";
-        HttpRequest req = HttpRequest.newBuilder(URI.create(url))
-            .header("Authorization", "Bearer " + token())
+        String base = configured() ? OAUTH_BASE : PUBLIC_BASE;
+        String url = base + permalink + ".json?raw_json=1";
+        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url))
             .header("User-Agent", props.getUserAgent())
             .timeout(Duration.ofSeconds(20))
-            .GET()
-            .build();
-        HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
+            .GET();
+        if (configured()) builder.header("Authorization", "Bearer " + token());
+        HttpResponse<String> res = http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
         if (res.statusCode() != 200) return Optional.empty();
         return Optional.of(mapper.readTree(res.body()));
     }
